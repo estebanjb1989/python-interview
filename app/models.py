@@ -1,0 +1,29 @@
+"""Pydantic models for TodoList API."""
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class TodoListBase(BaseModel):
+    """Base TodoList model with common attributes."""
+
+    name: str = Field(..., min_length=1, description="Name of the todo list")
+
+
+class TodoListCreate(TodoListBase):
+    """Model for creating a new TodoList."""
+
+    pass
+
+
+class TodoListUpdate(TodoListBase):
+    """Model for updating an existing TodoList."""
+
+    pass
+
+
+class TodoList(TodoListBase):
+    """TodoList model with all attributes including ID."""
+
+    id: int = Field(..., description="Unique identifier for the todo list")
+
+    model_config = ConfigDict(from_attributes=True)
