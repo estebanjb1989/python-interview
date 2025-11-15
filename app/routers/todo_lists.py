@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.models import TodoList, TodoListCreate, TodoListUpdate
+from app.models.TodoList import TodoList, TodoListCreate, TodoListUpdate
 from app.services.todo_lists import TodoListService, get_todo_list_service
 
 router = APIRouter(prefix="/api/todolists", tags=["todolists"])

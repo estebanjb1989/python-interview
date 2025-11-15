@@ -1,12 +1,17 @@
 """Pydantic models for TodoList API."""
 
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.Todo import Todo
 
 
 class TodoListBase(BaseModel):
     """Base TodoList model with common attributes."""
 
     name: str = Field(..., min_length=1, description="Name of the todo list")
+    todos: Optional[list[Todo]] = []
 
 
 class TodoListCreate(TodoListBase):

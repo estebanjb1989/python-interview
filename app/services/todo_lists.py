@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from app.models import TodoList, TodoListCreate, TodoListUpdate
+from app.models.TodoList import TodoList, TodoListCreate, TodoListUpdate
 
 
 class TodoListService:
@@ -85,6 +85,12 @@ class TodoListService:
                 self._storage.pop(i)
                 return True
         return False
+
+    def get_todos(self, todo_list_id: int):
+        for todo_list in self._storage:
+            if todo_list.id == todo_list_id:
+                return todo_list.todos
+        return None
 
 
 # Global singleton instance
