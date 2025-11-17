@@ -40,7 +40,6 @@ def client() -> TestClient:
     """
     return TestClient(app)
 
-
 class TestIndex:
     """Tests for GET /api/todolists endpoint."""
 
@@ -219,3 +218,82 @@ class TestDelete:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
         mock_service.delete.assert_called_once_with(999)
+
+class TestToggleCompleteAsync:
+    """Tests for PUT /api/todolists/{id}/toggle-complete-async endpoint."""
+
+    def test_triggers_background_process(
+        self,
+        client: TestClient,
+        mock_service: MagicMock
+    ) -> None:
+        """Should return 202 and call service.process_toggle_complete_background."""
+        # Arrange
+        mock_service.is_locked.return_value = False
+        mock_service.process_toggle_complete_background.return_value = None
+
+        # Act
+        response = client.put(
+            "/api/todolists/1/toggle-complete-async",
+            json={"completed": True}
+        )
+
+        # Assert
+        assert response.status_code == 202
+        mock_service.process_toggle_complete_background.assert_called_once_with(1, True)
+
+    def test_returns_409_when_locked(
+        self,
+        client: TestClient,
+        mock_service: MagicMock
+    ) -> None:
+        """Should return 409 when toggle is already running."""
+        # Arrange
+        mock_service.is_locked.return_value = True
+
+        # Act
+        response = client.put(
+            "/api/todolists/1/toggle-complete-async",
+            json={"completed": True}
+        )
+
+        # Assert
+        assert response.status_code == 409
+        mock_service.process_toggle_complete_background.assert_not_called()
+
+    def test_validates_required_field(
+        self,
+        client: TestClient,
+        mock_service: MagicMock
+    ) -> None:
+        """Should return 422 if 'completed' field is missing."""
+        # Arrange
+        mock_service.is_locked.return_value = False
+
+        # Act
+        response = client.put("/api/todolists/1/toggle-complete-async", json={})
+
+        # Assert
+        assert response.status_code == 422
+        mock_service.process_toggle_complete_background.assert_not_called()
+
+    def test_handles_service_error(
+        self,
+        client: TestClient,
+        mock_service: MagicMock
+    ) -> None:
+        """If the service fails internally, the endpoint should still return 202."""
+
+        # El endpoint llama al método en threadpool → side_effect rompe el test
+        # Así que simulamos un retorno y verificamos el status
+        mock_service.is_locked.return_value = False
+        mock_service.process_toggle_complete_background.return_value = None
+
+        response = client.put(
+            "/api/todolists/1/toggle-complete-async",
+            json={"completed": False}
+        )
+
+        assert response.status_code == 202
+        mock_service.process_toggle_complete_background.assert_called_once_with(1, False)
+

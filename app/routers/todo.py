@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.models.Todo import CreateTodoDTO, Todo, UpdateTodoDTO
 from app.services.todo import TodoService, get_todo_service
@@ -133,7 +133,7 @@ async def delete(
     todo_list_id: int,
     todo_id: int,
     service: Annotated[TodoService, Depends(get_todo_service)],
-):
+) -> Response:
     """
     Deletes one todo for the given todo list
 
@@ -154,6 +154,8 @@ async def delete(
 
         if not deleted:
             raise ValueError("todo not found")
+
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error

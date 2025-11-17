@@ -1,6 +1,6 @@
 """TodoService"""
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import Depends
 
@@ -12,7 +12,7 @@ class TodoService:
     def __init__(self, todo_list_service: TodoListService):
         self.todo_list_service = todo_list_service
 
-    def all(self, todo_list_id: int):
+    def all(self, todo_list_id: int) -> list[Todo]:
         """
         Gets all items from a given TodoList.
 
@@ -23,12 +23,15 @@ class TodoService:
             The todo list items
         """
         todos = self.todo_list_service.get_todos(todo_list_id)
+        todos_list: list[Todo] = todos or []
+
         if todos is None:
             raise ValueError(f"Todo list with ID:{todo_list_id} not found")
 
-        return todos
+        return todos_list
 
-    def get(self, todo_list_id: int, todo_id: int):
+
+    def get(self, todo_list_id: int, todo_id: int) -> Todo:
         """
         Gets one Todo from the given TodoList.
 
@@ -39,17 +42,25 @@ class TodoService:
             Todo specified item of the specified todo list
         """
         todos = self.todo_list_service.get_todos(todo_list_id)
-        if todos is None:
+
+        todos_list: list[Todo] = todos or []
+
+        if not todos_list:
             raise ValueError(f"Todo list with ID:{todo_list_id} not found")
 
-        todo = next((todo for todo in todos if todo.id == todo_id), None)
+        from typing import Optional
+        todo: Optional[Todo] = next((t for t in todos_list if t.id == todo_id), None)
+
         if todo is None:
             raise ValueError(
                 f"Todo with ID:{todo_id} from todo list with ID:{todo_list_id} not found"
             )
+
         return todo
 
-    def create(self, todo_list_id: str, todo_payload: CreateTodoDTO):
+
+
+    def create(self, todo_list_id: int, todo_payload: CreateTodoDTO) -> Todo:
         """
         Adds a todo to an existing TodoList.
 
@@ -71,7 +82,7 @@ class TodoService:
         todo_list.todos = todos
         return new_todo
 
-    def update(self, todo_list_id: int, todo_id: int, todo_payload: UpdateTodoDTO):
+    def update(self, todo_list_id: int, todo_id: int, todo_payload: UpdateTodoDTO) -> Todo:
         """
         Updates the given Todo of the given TodoList
 
@@ -90,12 +101,16 @@ class TodoService:
         todos = todo_list.todos or []
         for idx, todo in enumerate(todos):
             if todo.id == todo_id:
-                todo_list.todos[idx] = Todo(id=todo_id, **todo_payload.dict())
-                return todo_list.todos[idx]
+                updated_todo = Todo(id=todo_id, **todo_payload.dict())
+
+                todos[idx] = updated_todo
+                todo_list.todos = todos
+
+                return updated_todo
 
         raise ValueError(f"Todo with ID:{todo_id} from todo list with ID:{todo_list_id} not found")
 
-    def delete(self, todo_list_id: int, todo_id: int):
+    def delete(self, todo_list_id: int, todo_id: int) -> bool:
         """
         Deletes the given Todo of the given TodoList
 
@@ -111,8 +126,9 @@ class TodoService:
             raise ValueError(f"Todo list with ID:{todo_list_id} not found")
 
         todos = todo_list.todos
-        prev_len = len(todos)
-        new_todos = [todo for todo in todos if todo.id != todo_id]
+        todos_list: list[Todo] = todos or []
+        prev_len = len(todos_list)
+        new_todos = [todo for todo in todos_list if todo.id != todo_id]
         todo_list.todos = new_todos
         if prev_len == len(todo_list.todos):
             raise ValueError(
@@ -121,10 +137,12 @@ class TodoService:
         return True
 
 
-_todo_service: TodoService = None
+_todo_service: Optional[TodoService] = None
 
 
-def get_todo_service(todo_list_service: Annotated[TodoListService, Depends(get_todo_list_service)]):
+def get_todo_service(
+    todo_list_service: Annotated[TodoListService, Depends(get_todo_list_service)]
+) -> TodoService:
     """
     Singleton generator
 

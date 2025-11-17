@@ -2,9 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
-from app.models.TodoList import TodoList, TodoListCreate, TodoListUpdate
+from app.models.TodoList import (
+    TodoList,
+    TodoListCreate,
+    TodoListUpdate,
+    ToggleCompleteAsyncResponse,
+    ToggleCompleteRequest,
+)
 from app.services.todo_lists import TodoListService, get_todo_list_service
 
 router = APIRouter(prefix="/api/todolists", tags=["todolists"])
@@ -118,3 +124,52 @@ async def delete(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"TodoList with id {todo_list_id} not found",
         )
+
+@router.put(
+    "/{todo_list_id}/toggle-complete-async",
+    response_model=ToggleCompleteAsyncResponse,
+    status_code=status.HTTP_202_ACCEPTED
+)
+async def toggle_complete_async(
+    todo_list_id: int,
+    body: ToggleCompleteRequest,
+    background_tasks: BackgroundTasks,
+    service: Annotated[TodoListService, Depends(get_todo_list_service)],
+) -> ToggleCompleteAsyncResponse:
+    """
+    Starts a background job to toggle completion state of ALL items in the list.
+    Does NOT wait for the operation to finish.
+
+    When the job finishes, backend will send a websocket event to the frontend.
+
+    Args:
+        todo_list_id: The ID of the todo list to update its items as completed/not completed
+        service: Injected TodoListService instance
+
+    Returns:
+        HTTP 202 Status accepted with todo_list_id
+
+    Raises:
+        HTTPException: 404 if todo list not found
+    """
+    todo_list = service.get(todo_list_id)
+    if todo_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"TodoList with id {todo_list_id} not found",
+        )
+
+    if service.is_locked(todo_list_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Toggle in progress. Try again later."
+        )
+
+    service.lock(todo_list_id)
+    background_tasks.add_task(
+        service.process_toggle_complete_background,
+        todo_list_id,
+        body.completed
+    )
+
+    return ToggleCompleteAsyncResponse(status="processing", todo_list_id=todo_list_id)

@@ -13,7 +13,6 @@ class TodoListBase(BaseModel):
     name: str = Field(..., min_length=1, description="Name of the todo list")
     todos: Optional[list[Todo]] = []
 
-
 class TodoListCreate(TodoListBase):
     """Model for creating a new TodoList."""
 
@@ -32,3 +31,10 @@ class TodoList(TodoListBase):
     id: int = Field(..., description="Unique identifier for the todo list")
 
     model_config = ConfigDict(from_attributes=True)
+
+class ToggleCompleteRequest(BaseModel):
+    completed: bool
+
+class ToggleCompleteAsyncResponse(BaseModel):
+    status: str
+    todo_list_id: int

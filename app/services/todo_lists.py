@@ -1,12 +1,26 @@
 """TodoList service with in-memory storage."""
 
+import asyncio
 from typing import Optional
 
+from app.core.event_loop import get_loop
+from app.models.Todo import Todo
 from app.models.TodoList import TodoList, TodoListCreate, TodoListUpdate
+from app.websocket.manager import websocket_manager
 
 
 class TodoListService:
     """Service for managing TodoLists with in-memory storage."""
+    _locks: set[int] = set()
+
+    def is_locked(self, list_id: int) -> bool:
+        return list_id in self._locks
+
+    def lock(self, list_id: int) -> None:
+        self._locks.add(list_id)
+
+    def unlock(self, list_id: int) -> None:
+        self._locks.discard(list_id)
 
     def __init__(self) -> None:
         """Initialize the service with empty storage."""
@@ -86,12 +100,81 @@ class TodoListService:
                 return True
         return False
 
-    def get_todos(self, todo_list_id: int):
+    def get_todos(self, todo_list_id: int) -> Optional[list[Todo]]:
         for todo_list in self._storage:
             if todo_list.id == todo_list_id:
                 return todo_list.todos
         return None
 
+    def process_toggle_complete_background(self, todo_list_id: int, completed: bool) -> None:
+        """
+        Background long-running toggle-complete.
+        Notifies frontend through WebSocket.
+        """
+        event_loop = get_loop()
+        try:
+            todo_list = self.get(todo_list_id)
+
+            if not todo_list:
+                event_loop.call_soon_threadsafe(
+                    lambda: (
+                        asyncio.create_task(
+                            websocket_manager.broadcast_retry(
+                                todo_list_id,
+                                {
+                                    "event": "toggle_complete_error",
+                                    "listId": todo_list_id,
+                                    "error": "TodoList not found"
+                                }
+                            )
+                        )
+                    )
+                )
+                return
+
+            todos = todo_list.todos or []
+
+            for todo in todos:
+                todo.completed = completed
+
+            event_loop.call_soon_threadsafe(
+                lambda: (
+                    asyncio.create_task(
+                        websocket_manager.broadcast_retry(
+                            todo_list_id,
+                            {
+                                "event": "toggle_complete_done",
+                                "listId": todo_list_id,
+                                "completed": completed
+                            }
+                        )
+                    )
+                )
+            )
+
+
+        except Exception as err:
+            captured_err = str(err)
+
+            def _retry_task(err_msg: str = captured_err) -> None:
+                asyncio.create_task(
+                    websocket_manager.broadcast_retry(
+                        todo_list_id,
+                        {
+                            "event": "toggle_complete_error",
+                            "listId": todo_list_id,
+                            "error": err_msg,
+                        },
+                    )
+                )
+
+            event_loop.call_soon_threadsafe(_retry_task)
+
+        finally:
+            del todos
+            del todo_list
+
+            self.unlock(todo_list_id)
 
 # Global singleton instance
 _todo_list_service: Optional[TodoListService] = None
